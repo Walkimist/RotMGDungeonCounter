@@ -1,8 +1,9 @@
 from PyQt5 import QtWidgets, QtGui
-from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QLabel, QScrollArea, QComboBox, QGraphicsOpacityEffect, QCheckBox
+from PyQt5.QtWidgets import QApplication, QLineEdit, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QLabel, QScrollArea, QComboBox, QPushButton, QGraphicsOpacityEffect, QCheckBox
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtCore import Qt, pyqtSignal
 from pathlib import Path
+from datetime import datetime
 import sys, os, pickle
 
 darkStylesheet = """
@@ -38,40 +39,48 @@ QScrollBar::handle:vertical {
 """
 
 dungeons = []
+characters = []
 ALLDUNGEONS = ["Pirate Cave" , "Forest Maze" , "Spider Den" , "Snake Pit" , "Forbidden Jungle" , "The Hive" , "Ancient Ruins" , "Magic Woods" , "Sprite World" , "Candyland Hunting Grounds" , "Cave of a Thousand Treasures" , "Undead Lair" , "Abyss of Demons" , "Manor of the Immortals" , "Puppet Master’s Theatre" , "Toxic Sewers" , "Cursed Library" , "Haunted Cemetery" , "Mad Lab" , "Parasite Chambers" , "Davy Jones’ Locker" , "Mountain Temple" , "The Third Dimension" , "Lair of Draconis" , "Deadwater Docks" , "Woodland Labyrinth" , "The Crawling Depths" , "Ocean Trench" , "Ice Cave" , "Tomb of the Ancients" , "Fungal Cavern" , "Crystal Cavern" , "The Nest" , "The Shatters" , "Lost Halls" , "Cultist Hideout" , "The Void" , "Sulfurous Wetlands" , "Kogbold Steamworks" , "Oryx’s Castle" , "Lair of Shaitan" , "Puppet Master’s Encore" , "Cnidarian Reef" , "Secluded Thicket" , "High Tech Terror" , "Oryx’s Chamber" , "Wine Cellar" , "Oryx’s Sanctuary" , "Belladonna’s Garden" , "Ice Tomb" , "Mad God Mayhem" , "Battle for the Nexus" , "Santa’s Workshop" , "The Machine" , "Malogia" , "Untaris" , "Forax" , "Katalund" , "Rainbow Road" , "Beachzone" , "Spectral Penitentiary"]
 COLLECTIONS = ["Tunnel Rat", "Explosive Journey", "Travel of the Decade", "First Steps", "King of the Mountains", "Conqueror of the Realm", "Enemy of the Court", "Epic Battles", "Far Out", "Hero of the Nexus", "Season’s Beatins", "Realm of the Mad God"]
-SAVEFILE = 'save.pickle'
+SAVEFILE = 'save'
 
-def createSave(path):
-    p = f"saves/{path}"
+def createSave(path, saveType):
+    p = f"saves/{path}{str.upper(saveType)}.pickle"
     if not os.path.exists(p):
         print("Save file not found, creating new file.")
         f = open(f"{p}", "x")
         f.close()
     return p
 
-def saveData(path):
-    p = f"saves/{path}"
+def saveData(path, saveType):
+    p = f"saves/{path}{str.upper(saveType)}.pickle"
     with open(p, 'wb') as f:
-        pickle.dump({dungeon.name: dungeon.isComplete for dungeon in dungeons}, f)
+        if saveType == 'd':
+            pickle.dump({dungeon.name: dungeon.isComplete for dungeon in dungeons}, f)
+        elif saveType == 'c':
+            pickle.dump({character.id: character for character in characters}, f)
 
-def loadData(path):
-    p = f"saves/{path}"
+def loadData(path, saveType):
+    global characters
+    p = f"saves/{path}{str.upper(saveType)}.pickle"
     if not os.path.exists(p):
-        return
+        return None
     
     with open(p, 'rb') as f:
         try:
             data = pickle.load(f)
-            for dungeon in dungeons:
-                if dungeon.name in data:
-                    dungeon.isComplete = data[dungeon.name]
+            if saveType == 'd':
+                for dungeon in dungeons:
+                    if dungeon.name in data:
+                        dungeon.isComplete = data[dungeon.name]
+            elif saveType == 'c':
+                characters = list(data.values())
         except Exception as e:
-            #print(f"Failed to load save data: {e}")
+            print(f"Failed to load save data: {e}")
             pass
 
 class TitleBar(QWidget):
-    def __init__(self, parent):
+    def __init__(self, parent, title):
         super().__init__()
         self.parent = parent
         self.setFixedHeight(40)
@@ -81,7 +90,7 @@ class TitleBar(QWidget):
         layout.setContentsMargins(10, 0, 10, 0)
         layout.setSpacing(10)
 
-        self.title = QLabel("RotMG Completion Tracker")
+        self.title = QLabel(f"Completion Tracker | {title}")
         self.title.setStyleSheet("color: white; font-weight: bold;")
         layout.addWidget(self.title)
 
@@ -186,22 +195,13 @@ class ResizableWindow(QMainWindow):
         return Qt.ArrowCursor
 
 class Character():
-    name = ''
-    savePath = ''
-    icon = ''
-
     def __init__(self, name, icon):
+        self.id = datetime.now().strftime('%Y%m%d%H%M%S%f')
         self.name = name
-        self.savePath = createSave(name)
+        self.dungeonsPath = createSave(self.id, 'd')
         self.icon = f"assets\\characters\\{icon}.png"
 
-    def load(self):
-        pass
-
 class Dungeon:
-    name = ''
-    collection = []
-    icon = ''
     isComplete = False
 
     def __init__(self, name):
@@ -236,13 +236,38 @@ class Dungeon:
         self.collection = coll
         self.icon = f"assets\\dungeons\\{name}.png"
 
-class DungeonWidget(QWidget):
-    clicked = pyqtSignal()
-
-    def __init__(self, dungeon):
+class CharacterWidget(QWidget):
+    def __init__(self, character):
         super().__init__()
         layout = QHBoxLayout()
 
+        self.character = character
+
+        self.image = QLabel(self)
+        pixmap = QPixmap(character.icon)
+        resizedPixmap = pixmap.scaled(50, 50, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+
+        self.image.setPixmap(resizedPixmap)
+        self.image.setScaledContents(False)
+
+        self.label = QLabel(character.name)
+
+        layout.addWidget(self.image)
+        layout.addWidget(self.label)
+
+        self.setLayout(layout)
+
+    def mousePressEvent(self, event):
+        pass
+
+class DungeonWidget(QWidget):
+    clicked = pyqtSignal()
+
+    def __init__(self, dungeon, character):
+        super().__init__()
+        layout = QHBoxLayout()
+
+        self.character = character
         self.dungeon = dungeon
 
         self.image = QLabel(self)
@@ -264,7 +289,7 @@ class DungeonWidget(QWidget):
     def mousePressEvent(self, event):
         self.dungeon.isComplete = not self.dungeon.isComplete
         self.updateStyle()
-        saveData(SAVEFILE)
+        saveData(self.character.dungeonsPath, 'd')
         self.clicked.emit()
     
     def updateStyle(self):
@@ -278,8 +303,10 @@ class DungeonWidget(QWidget):
             self.label.setStyleSheet("color: #f0f0f0;")
 
 class CollectionViewer(ResizableWindow):
-    def __init__(self, dungeons):
+    def __init__(self, dungeons, character):
         super().__init__()
+        self.character = character
+        loadData(self.character.dungeonsPath, 'd')
         self.dungeons = dungeons
 
         self.dropDown = QComboBox()
@@ -305,7 +332,7 @@ class CollectionViewer(ResizableWindow):
         mainLayout.setContentsMargins(0, 0, 0, 0)
         mainLayout.setSpacing(0)
 
-        self.titleBar = TitleBar(self)
+        self.titleBar = TitleBar(self, "Dungeons")
         mainLayout.addWidget(self.titleBar)
 
         contentLayout = QVBoxLayout()
@@ -333,7 +360,7 @@ class CollectionViewer(ResizableWindow):
                 child.widget().deleteLater()
 
         for dungeon in dungeons:
-            self.layout.addWidget(DungeonWidget(dungeon))
+            self.layout.addWidget(DungeonWidget(dungeon, self.character))
 
     def parseDungeons(self, selected):
         parsedDungeons = []
@@ -365,6 +392,7 @@ class CollectionViewer(ResizableWindow):
             self.collectionStatus.setText(f"{selected} - INCOMPLETE")
 
         self.changeHideState(self.hideState)
+
     def changeHideState(self, state):
         if state == 2:
             self.hideState = True
@@ -377,21 +405,92 @@ class CollectionViewer(ResizableWindow):
     def mouseReleaseEvent(self, event):
         self.checkIfCompleted(self.selected)
 
+class CharacterViewer(ResizableWindow):
+    def __init__(self, characters):
+        super().__init__()
+        self.characters = characters
+
+        self.scroll = QScrollArea()
+        self.scroll.setWidgetResizable(True)
+
+        self.characterName = QLineEdit()
+        self.characterName.setFrame(False)
+        self.characterName.setPlaceholderText("Enter character name")
+
+        self.createCharacterButton = QPushButton("Create Character")
+        self.createCharacterButton.clicked.connect( lambda: self.createCharacter(self.characterName.text(), 'wizard') )
+        self.createCharacterButton.clicked.connect(self.displayCharacters)
+
+        self.createCharacterLayout = QHBoxLayout()
+        self.createCharacterLayout.addWidget(self.characterName)
+        self.createCharacterLayout.addWidget(self.createCharacterButton)
+
+        self.content = QWidget()
+        self.layout = QVBoxLayout(self.content)
+        self.scroll.setWidget(self.content)
+
+        mainLayout = QVBoxLayout()
+        mainLayout.setContentsMargins(0, 0, 0, 0)
+        mainLayout.setSpacing(0)
+
+        self.titleBar = TitleBar(self, "Characters")
+        mainLayout.addWidget(self.titleBar)
+
+        contentLayout = QVBoxLayout()
+        contentLayout.addLayout(self.createCharacterLayout)
+        contentLayout.addWidget(self.scroll)
+
+        contentWidget = QWidget()
+        contentWidget.setLayout(contentLayout)
+        mainLayout.addWidget(contentWidget)
+
+        container = QWidget()
+        container.setLayout(mainLayout)
+        self.setCentralWidget(container)
+
+        self.displayCharacters()
+
+    def displayCharacters(self):
+        while self.layout.count():
+            child = self.layout.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+
+        for character in self.characters:
+            self.layout.addWidget(CharacterWidget(character))
+
+    def createCharacter(self, name, icon):
+        isCreated = False
+
+        for character in self.characters:
+            if character.name == name:
+                isCreated = True
+
+        if not isCreated:
+            newCharacter = Character(name, icon)
+            self.characters.append(newCharacter)
+            saveData('characters', 'c')
+    
 def window():
     app = QApplication(sys.argv)
     app.setStyleSheet(darkStylesheet)
-    win = CollectionViewer(dungeons)
+    #win = CollectionViewer(dungeons)
+    win = CharacterViewer(characters)
     win.setWindowFlags(Qt.Window | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
-    win.setGeometry(800, 300, 280, 600)
-    win.setMinimumWidth(280)
+    win.setGeometry(800, 300, 300, 600)
+    win.setMinimumWidth(300)
     win.show()
     sys.exit(app.exec_())
 
-createSave(SAVEFILE)
+createSave('dungeons', 'd')
+createSave('characters', 'c')
 
 for dungeonName in ALLDUNGEONS:
-    dg = dungeons.append(Dungeon(dungeonName))
+    dungeons.append(Dungeon(dungeonName))
 
-loadData(SAVEFILE)
+loadData('dungeons', 'd')
+loadData('characters', 'c')
+
+#createCharacter('elmago', 'wizard')
 
 window()
