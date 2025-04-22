@@ -40,12 +40,16 @@ QScrollBar::handle:vertical {
 
 dungeons = []
 characters = []
+CLASSES = ['Archer', 'Assassin', 'Bard', 'Huntress', 'Kensei', 'Knight', 'Mystic', 'Necromancer', 'Ninja', 'Paladin', 'Priest', 'Rogue', 'Samurai', 'Sorcerer', 'Summoner', 'Trickster', 'Warrior', 'Wizard']
 ALLDUNGEONS = ["Pirate Cave" , "Forest Maze" , "Spider Den" , "Snake Pit" , "Forbidden Jungle" , "The Hive" , "Ancient Ruins" , "Magic Woods" , "Sprite World" , "Candyland Hunting Grounds" , "Cave of a Thousand Treasures" , "Undead Lair" , "Abyss of Demons" , "Manor of the Immortals" , "Puppet Master’s Theatre" , "Toxic Sewers" , "Cursed Library" , "Haunted Cemetery" , "Mad Lab" , "Parasite Chambers" , "Davy Jones’ Locker" , "Mountain Temple" , "The Third Dimension" , "Lair of Draconis" , "Deadwater Docks" , "Woodland Labyrinth" , "The Crawling Depths" , "Ocean Trench" , "Ice Cave" , "Tomb of the Ancients" , "Fungal Cavern" , "Crystal Cavern" , "The Nest" , "The Shatters" , "Lost Halls" , "Cultist Hideout" , "The Void" , "Sulfurous Wetlands" , "Kogbold Steamworks" , "Oryx’s Castle" , "Lair of Shaitan" , "Puppet Master’s Encore" , "Cnidarian Reef" , "Secluded Thicket" , "High Tech Terror" , "Oryx’s Chamber" , "Wine Cellar" , "Oryx’s Sanctuary" , "Belladonna’s Garden" , "Ice Tomb" , "Mad God Mayhem" , "Battle for the Nexus" , "Santa’s Workshop" , "The Machine" , "Malogia" , "Untaris" , "Forax" , "Katalund" , "Rainbow Road" , "Beachzone" , "Spectral Penitentiary"]
 COLLECTIONS = ["Tunnel Rat", "Explosive Journey", "Travel of the Decade", "First Steps", "King of the Mountains", "Conqueror of the Realm", "Enemy of the Court", "Epic Battles", "Far Out", "Hero of the Nexus", "Season’s Beatins", "Realm of the Mad God"]
 SAVEFILE = 'save'
 
 def createSave(path, saveType):
-    p = f"saves/{path}{str.upper(saveType)}.pickle"
+    if path.startswith('saves/'):
+        p = f"{path}{str.upper(saveType)}.pickle"
+    else:
+        p = f"saves/{path}{str.upper(saveType)}.pickle"
     if not os.path.exists(p):
         print("Save file not found, creating new file.")
         f = open(f"{p}", "x")
@@ -53,7 +57,10 @@ def createSave(path, saveType):
     return p
 
 def saveData(path, saveType):
-    p = f"saves/{path}{str.upper(saveType)}.pickle"
+    if path.startswith('saves/'):
+        p = f"{path}{str.upper(saveType)}.pickle"
+    else:
+        p = f"saves/{path}{str.upper(saveType)}.pickle"
     with open(p, 'wb') as f:
         if saveType == 'd':
             pickle.dump({dungeon.name: dungeon.isComplete for dungeon in dungeons}, f)
@@ -62,7 +69,10 @@ def saveData(path, saveType):
 
 def loadData(path, saveType):
     global characters
-    p = f"saves/{path}{str.upper(saveType)}.pickle"
+    if path.startswith('saves/'):
+        p = f"{path}{str.upper(saveType)}.pickle"
+    else:
+        p = f"saves/{path}{str.upper(saveType)}.pickle"
     if not os.path.exists(p):
         return None
     
@@ -78,6 +88,21 @@ def loadData(path, saveType):
         except Exception as e:
             print(f"Failed to load save data: {e}")
             pass
+
+def deleteData(path, saveType):
+    if path.startswith('saves/'):
+        p = f"{path}{str.upper(saveType)}.pickle"
+    else:
+        p = f"saves/{path}{str.upper(saveType)}.pickle"
+    
+    if os.path.exists(p):
+        print("Deleting file")
+        os.remove(f"{p}")
+
+def configWindow(win):
+    win.setWindowFlags(Qt.Window | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
+    win.setGeometry(800, 300, 300, 600)
+    win.setMinimumWidth(300)
 
 class TitleBar(QWidget):
     def __init__(self, parent, title):
@@ -199,6 +224,9 @@ class Character():
         self.id = datetime.now().strftime('%Y%m%d%H%M%S%f')
         self.name = name
         self.dungeonsPath = createSave(self.id, 'd')
+        for dungeon in dungeons:
+            dungeon.isComplete = False
+        saveData(self.id, 'd')
         self.icon = f"assets\\characters\\{icon}.png"
 
 class Dungeon:
@@ -237,11 +265,15 @@ class Dungeon:
         self.icon = f"assets\\dungeons\\{name}.png"
 
 class CharacterWidget(QWidget):
-    def __init__(self, character):
+    def __init__(self, character, window):
         super().__init__()
         layout = QHBoxLayout()
 
+        self.window = window
         self.character = character
+
+        self.deleteButton = QPushButton("Delete")
+        self.deleteButton.clicked.connect(self.deleteCharacter)
 
         self.image = QLabel(self)
         pixmap = QPixmap(character.icon)
@@ -254,11 +286,23 @@ class CharacterWidget(QWidget):
 
         layout.addWidget(self.image)
         layout.addWidget(self.label)
+        layout.addWidget(self.deleteButton)
 
         self.setLayout(layout)
 
     def mousePressEvent(self, event):
-        pass
+        global dungeons
+        self.collectionViewer = CollectionViewer(dungeons, self.character)
+        configWindow(self.collectionViewer)
+        self.collectionViewer.show()
+        self.window.close()
+
+    def deleteCharacter(self):
+        global characters
+        deleteData(self.character.id, 'd')
+        characters.remove(self.character)
+        saveData('characters', 'c')
+        self.close()
 
 class DungeonWidget(QWidget):
     clicked = pyqtSignal()
@@ -289,25 +333,35 @@ class DungeonWidget(QWidget):
     def mousePressEvent(self, event):
         self.dungeon.isComplete = not self.dungeon.isComplete
         self.updateStyle()
-        saveData(self.character.dungeonsPath, 'd')
+        saveData(self.character.id, 'd')
         self.clicked.emit()
     
     def updateStyle(self):
         if self.dungeon.isComplete:
-            opacity = QGraphicsOpacityEffect()
-            opacity.setOpacity(0.4)
-            self.image.setGraphicsEffect(opacity)
-            self.label.setStyleSheet("color: #3b3b3b;")
+            self.setTransparent()
         else:
-            self.image.setGraphicsEffect(None)
-            self.label.setStyleSheet("color: #f0f0f0;")
+            self.setOpaque()
+
+    def setTransparent(self):
+        opacity = QGraphicsOpacityEffect()
+        opacity.setOpacity(0.4)
+        self.image.setGraphicsEffect(opacity)
+        self.label.setStyleSheet("color: #3b3b3b;")
+
+    def setOpaque(self):
+        self.image.setGraphicsEffect(None)
+        self.label.setStyleSheet("color: #f0f0f0;")
 
 class CollectionViewer(ResizableWindow):
     def __init__(self, dungeons, character):
         super().__init__()
         self.character = character
-        loadData(self.character.dungeonsPath, 'd')
+
+        loadData(self.character.id, 'd')
         self.dungeons = dungeons
+
+        self.characterSelector = QPushButton("Character Select")
+        self.characterSelector.clicked.connect(self.returnToSelect)
 
         self.dropDown = QComboBox()
         self.dropDown.addItems(COLLECTIONS)
@@ -332,10 +386,11 @@ class CollectionViewer(ResizableWindow):
         mainLayout.setContentsMargins(0, 0, 0, 0)
         mainLayout.setSpacing(0)
 
-        self.titleBar = TitleBar(self, "Dungeons")
+        self.titleBar = TitleBar(self, self.character.name)
         mainLayout.addWidget(self.titleBar)
 
         contentLayout = QVBoxLayout()
+        contentLayout.addWidget(self.characterSelector)
         contentLayout.addWidget(self.hideCompleted)
         contentLayout.addWidget(self.dropDown)
         contentLayout.addWidget(self.scroll)
@@ -405,6 +460,14 @@ class CollectionViewer(ResizableWindow):
     def mouseReleaseEvent(self, event):
         self.checkIfCompleted(self.selected)
 
+    def returnToSelect(self):
+        global characters
+        loadData('characters', 'c')
+        self.characterViewer = CharacterViewer(characters)
+        configWindow(self.characterViewer)
+        self.characterViewer.show()
+        self.close()
+
 class CharacterViewer(ResizableWindow):
     def __init__(self, characters):
         super().__init__()
@@ -417,12 +480,17 @@ class CharacterViewer(ResizableWindow):
         self.characterName.setFrame(False)
         self.characterName.setPlaceholderText("Enter character name")
 
+        self.characterIcon = QComboBox()
+        self.characterIcon.addItems(CLASSES)
+        self.characterIcon.setMaxVisibleItems(len(CLASSES))
+
         self.createCharacterButton = QPushButton("Create Character")
-        self.createCharacterButton.clicked.connect( lambda: self.createCharacter(self.characterName.text(), 'wizard') )
+        self.createCharacterButton.clicked.connect( lambda: self.createCharacter(self.characterName.text(), str.lower(self.characterIcon.currentText())) )
         self.createCharacterButton.clicked.connect(self.displayCharacters)
 
         self.createCharacterLayout = QHBoxLayout()
         self.createCharacterLayout.addWidget(self.characterName)
+        self.createCharacterLayout.addWidget(self.characterIcon)
         self.createCharacterLayout.addWidget(self.createCharacterButton)
 
         self.content = QWidget()
@@ -457,7 +525,7 @@ class CharacterViewer(ResizableWindow):
                 child.widget().deleteLater()
 
         for character in self.characters:
-            self.layout.addWidget(CharacterWidget(character))
+            self.layout.addWidget(CharacterWidget(character, self))
 
     def createCharacter(self, name, icon):
         isCreated = False
@@ -470,27 +538,25 @@ class CharacterViewer(ResizableWindow):
             newCharacter = Character(name, icon)
             self.characters.append(newCharacter)
             saveData('characters', 'c')
-    
-def window():
+
+def app():
     app = QApplication(sys.argv)
     app.setStyleSheet(darkStylesheet)
     #win = CollectionViewer(dungeons)
     win = CharacterViewer(characters)
-    win.setWindowFlags(Qt.Window | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
-    win.setGeometry(800, 300, 300, 600)
-    win.setMinimumWidth(300)
+    configWindow(win)
     win.show()
     sys.exit(app.exec_())
 
-createSave('dungeons', 'd')
+#createSave('dungeons', 'd')
 createSave('characters', 'c')
 
 for dungeonName in ALLDUNGEONS:
     dungeons.append(Dungeon(dungeonName))
 
-loadData('dungeons', 'd')
+#loadData('dungeons', 'd')
 loadData('characters', 'c')
 
 #createCharacter('elmago', 'wizard')
 
-window()
+app()
